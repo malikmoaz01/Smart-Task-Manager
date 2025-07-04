@@ -8,7 +8,7 @@ export default function Footer() {
         <div className="flex items-center justify-center space-x-2">
           <p className="text-gray-700 text-sm font-medium">
             Made with
-          </p>
+           </p>
           <Heart className="w-4 h-4 text-blue-500 animate-pulse" />
           <p className="text-gray-700 text-sm font-medium">
             for <span className="font-semibold text-blue-600">Jeeny</span>

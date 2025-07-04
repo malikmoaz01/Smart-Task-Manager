@@ -184,7 +184,7 @@ export default function Signup() {
                                 Sign in here
                             </a>
                         </p>
-                    </div>
+                     </div>
                 </div>
             </div>
         </div>

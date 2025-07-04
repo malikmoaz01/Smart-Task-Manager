@@ -1,6 +1,6 @@
 import React from 'react';
 import { Heart } from 'lucide-react';
-
+ 
 export default function Footer() {
   return (
     <footer className="bg-gradient-to-r from-blue-600 via-white to-blue-100 border-t border-gray-200 mt-auto shadow-inner">
