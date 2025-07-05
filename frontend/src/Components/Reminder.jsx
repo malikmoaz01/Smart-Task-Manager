@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Tag, AlertTriangle, ArrowLeft, Bell } from 'lucide-react';
+import { Calendar, Tag, AlertTriangle, ArrowLeft, Bell, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Reminder() {
@@ -7,6 +7,9 @@ export default function Reminder() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [reminderDates, setReminderDates] = useState({});
+  const [userEmail, setUserEmail] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState(null);
   const navigate = useNavigate();
 
   const getAuthToken = () => {
@@ -31,8 +34,31 @@ export default function Reminder() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchTasks();
+    } else {
+      loadLocalTasks();
     }
   }, [isAuthenticated]);
+
+  const loadLocalTasks = () => {
+    try {
+      const localTasks = localStorage.getItem('localTasks');
+      if (localTasks) {
+        const parsedTasks = JSON.parse(localTasks);
+        const sortedTasks = parsedTasks.sort((a, b) => new Date(a.reminder) - new Date(b.reminder));
+        setTasks(sortedTasks);
+      }
+    } catch (err) {
+      console.error('Error loading local tasks:', err);
+    }
+  };
+
+  const saveLocalTasks = (updatedTasks) => {
+    try {
+      localStorage.setItem('localTasks', JSON.stringify(updatedTasks));
+    } catch (err) {
+      console.error('Error saving local tasks:', err);
+    }
+  };
 
   const fetchTasks = async () => {
     try {
@@ -62,31 +88,123 @@ export default function Reminder() {
   };
 
   const handleSetReminder = async (taskId) => {
-    const token = getAuthToken();
     const reminderDate = reminderDates[taskId];
     if (!reminderDate) {
       alert('Please select a reminder date');
       return;
     }
+
+    if (isAuthenticated) {
+      try {
+        const token = getAuthToken();
+        const response = await fetch('http://localhost:5000/api/reminder/set', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ taskId, reminderDate })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          alert('Reminder set successfully!');
+          fetchTasks();
+        } else {
+          alert(data.message || 'Failed to set reminder');
+        }
+      } catch (err) {
+        console.error('Set reminder error:', err);
+        alert('Server error');
+      }
+    } else {
+      setCurrentTaskId(taskId);
+      setShowEmailModal(true);
+    }
+  };
+
+  const handleEmailSubmit = async () => {
+    if (!userEmail.trim()) {
+      alert('Please enter your email address');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
+      alert('Please enter a valid email address');
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:5000/api/reminder/set', {
+      const task = tasks.find(t => t._id === currentTaskId);
+      const reminderDate = reminderDates[currentTaskId];
+      
+      const response = await fetch('http://localhost:5000/api/reminder/guest', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ taskId, reminderDate })
+        body: JSON.stringify({
+          email: userEmail,
+          taskTitle: task.title,
+          taskDescription: task.description,
+          reminderDate: reminderDate,
+          message: `Hello! This is a friendly reminder about your task: "${task.title}". Please make sure to complete it by ${formatDate(task.deadline)}. Stay organized and productive!`
+        })
       });
 
       const data = await response.json();
       if (response.ok) {
-        alert('Reminder set successfully!');
-        fetchTasks();
+        const updatedTasks = tasks.map(t => 
+          t._id === currentTaskId 
+            ? { ...t, reminder: reminderDate, reminderEmail: userEmail }
+            : t
+        );
+        setTasks(updatedTasks);
+        saveLocalTasks(updatedTasks);
+        
+        alert('Reminder set successfully! You will receive an email notification.');
+        setShowEmailModal(false);
+        setUserEmail('');
+        setCurrentTaskId(null);
       } else {
         alert(data.message || 'Failed to set reminder');
       }
     } catch (err) {
       console.error('Set reminder error:', err);
+      alert('Server error');
+    }
+  };
+
+  const deleteTask = (taskId) => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+      if (isAuthenticated) { 
+        deleteTaskFromServer(taskId);
+      } else { 
+        const updatedTasks = tasks.filter(task => task._id !== taskId);
+        setTasks(updatedTasks);
+        saveLocalTasks(updatedTasks);
+      }
+    }
+  };
+
+  const deleteTaskFromServer = async (taskId) => {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        setTasks(tasks.filter(task => task._id !== taskId));
+        alert('Task deleted successfully');
+      } else {
+        alert('Failed to delete task');
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
       alert('Server error');
     }
   };
@@ -126,31 +244,11 @@ export default function Reminder() {
     }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
-          <p className="text-gray-600 mb-6">
-            You must be logged in to access your tasks. Please log in to continue.
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <div className="flex items-center space-x-4 mb-2">
+          <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => navigate('/')}
               className="text-gray-600 hover:text-gray-900 flex items-center space-x-2"
@@ -158,6 +256,19 @@ export default function Reminder() {
               <ArrowLeft size={20} />
               <span>Back to Home</span>
             </button>
+            {!isAuthenticated && (
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <p className="text-sm text-blue-800"> 
+                  <strong>Note:</strong> You're using local storage. Tasks will be saved locally and won't sync across devices. 
+                  <button 
+                    onClick={() => navigate('/login')} 
+                    className="text-blue-600 hover:text-blue-800 underline ml-1"
+                  >
+                    Login
+                  </button> for cloud sync.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -196,6 +307,12 @@ export default function Reminder() {
                           <Calendar size={14} />
                           <span>Deadline: {formatDate(task.deadline)}</span>
                         </span>
+                        {!isAuthenticated && task.reminderEmail && (
+                          <span className="text-gray-500 flex items-center space-x-1">
+                            <Mail size={14} />
+                            <span>Email: {task.reminderEmail}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center space-x-2 mt-3">
@@ -210,6 +327,12 @@ export default function Reminder() {
                           className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm"
                         >
                           Set Reminder
+                        </button>
+                        <button
+                          onClick={() => deleteTask(task._id)}
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm"
+                        >
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -242,6 +365,49 @@ export default function Reminder() {
           </div>
         )}
       </div>
+
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Set Reminder Email</h3>
+            <p className="text-gray-600 mb-4">
+              Enter your email address to receive reminder notifications for this task.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your email"
+                />
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleEmailSubmit}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md"
+                >
+                  Set Reminder
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEmailModal(false);
+                    setUserEmail('');
+                    setCurrentTaskId(null);
+                  }}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-md"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

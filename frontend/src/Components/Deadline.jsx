@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Tag, AlertTriangle, ArrowLeft, Check, X } from 'lucide-react';
+import { Calendar, Clock, Tag, AlertTriangle, ArrowLeft, Check, X, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Deadline() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showLocalNote, setShowLocalNote] = useState(true);
   const navigate = useNavigate();
 
   const getAuthToken = () => {
@@ -30,9 +31,29 @@ export default function Deadline() {
 
   const isAuthenticated = getAuthToken();
 
+  const loadLocalTasks = () => {
+    const localTasks = localStorage.getItem('localTasks');
+    if (localTasks) {
+      try {
+        const allTasks = JSON.parse(localTasks);
+        const incompleteTasks = allTasks.filter(task => !task.completed);
+        const sortedTasks = incompleteTasks.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+        setTasks(sortedTasks);
+      } catch (error) {
+        console.error('Error loading local tasks:', error);
+      }
+    }
+  };
+
+  const saveLocalTasks = (tasksToSave) => {
+    localStorage.setItem('localTasks', JSON.stringify(tasksToSave));
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchTasks();
+    } else {
+      loadLocalTasks();
     }
   }, [isAuthenticated]);
 
@@ -63,33 +84,45 @@ export default function Deadline() {
   };
 
   const toggleTaskCompletion = async (taskId) => {
-    try {
-      setLoading(true);
-      const token = getAuthToken();
-      
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/toggle`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+    if (isAuthenticated) {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+        
+        const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/toggle`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-      if (response.ok) {
-        const data = await response.json(); 
-        if (data.task.completed) {
-          setTasks(tasks.filter(task => task._id !== taskId));
+        if (response.ok) {
+          const data = await response.json(); 
+          if (data.task.completed) {
+            setTasks(tasks.filter(task => task._id !== taskId));
+          } else {
+            setTasks(tasks.map(task => 
+              task._id === taskId ? data.task : task
+            ));
+          }
         } else {
-          setTasks(tasks.map(task => 
-            task._id === taskId ? data.task : task
-          ));
+          setError('Failed to update task status');
         }
-      } else {
-        setError('Failed to update task status');
+      } catch (err) {
+        setError('Error updating task status');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Error updating task status');
-    } finally {
-      setLoading(false);
+    } else {
+      const allLocalTasks = JSON.parse(localStorage.getItem('localTasks') || '[]');
+      const updatedTasks = allLocalTasks.map(task => 
+        task._id === taskId ? { ...task, completed: !task.completed } : task
+      );
+      saveLocalTasks(updatedTasks);
+      
+      const incompleteTasks = updatedTasks.filter(task => !task.completed);
+      const sortedTasks = incompleteTasks.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+      setTasks(sortedTasks);
     }
   };
 
@@ -129,25 +162,17 @@ export default function Deadline() {
     }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
-          <p className="text-gray-600 mb-6">
-            You must be logged in to access your tasks. Please log in to continue.
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const dismissLocalNote = () => {
+    setShowLocalNote(false);
+    localStorage.setItem('localNoteDismissedDeadline', 'true');
+  };
+
+  useEffect(() => {
+    const noteDismissed = localStorage.getItem('localNoteDismissedDeadline');
+    if (noteDismissed === 'true') {
+      setShowLocalNote(false);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -161,10 +186,28 @@ export default function Deadline() {
               <ArrowLeft size={20} />
               <span>Back to Home</span>
             </button>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Task Deadlines</h1>
-          <p className="text-gray-600">Track your upcoming deadlines and stay organized</p>
+          </div> 
         </div>
+
+        {!isAuthenticated && showLocalNote && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
+            <div className="flex items-start">
+              <Info className="text-blue-400 mr-3 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="text-blue-800">
+                  <strong>Note:</strong> Your tasks are stored locally.
+                  If you want to sync your tasks across devices and save them permanently, please login to enable the sync feature.
+                </p> 
+              </div>
+              <button
+                onClick={dismissLocalNote}
+                className="text-blue-600 hover:text-blue-800 ml-4"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">

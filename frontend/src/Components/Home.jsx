@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Calendar, Clock, Tag, AlertTriangle, Check, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Calendar, Clock, Tag, AlertTriangle, Check, X, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Home() {
@@ -8,6 +8,7 @@ export default function Home() {
   const [editingTask, setEditingTask] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showLocalNote, setShowLocalNote] = useState(true);
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     title: '',
@@ -16,6 +17,11 @@ export default function Home() {
     deadline: '',
     reminder: ''
   });
+
+  const getTodayDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
  
   const getAuthToken = () => {
     const userSession = localStorage.getItem('userSession');
@@ -39,9 +45,30 @@ export default function Home() {
 
   const isAuthenticated = getAuthToken();
 
+  const loadLocalTasks = () => {
+    const localTasks = localStorage.getItem('localTasks');
+    if (localTasks) {
+      try {
+        setTasks(JSON.parse(localTasks));
+      } catch (error) {
+        console.error('Error loading local tasks:', error);
+      }
+    }
+  };
+
+  const saveLocalTasks = (tasksToSave) => {
+    localStorage.setItem('localTasks', JSON.stringify(tasksToSave));
+  };
+
+  const generateLocalId = () => {
+    return 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchTasks();
+    } else {
+      loadLocalTasks();
     }
   }, [isAuthenticated]);
 
@@ -95,6 +122,12 @@ export default function Home() {
       return false;
     }
     
+    const today = getTodayDate();
+    if (formData.deadline < today) {
+      setError('Deadline cannot be in the past');
+      return false;
+    }
+    
     if (!formData.reminder) {
       setError('Reminder is required');
       return false;
@@ -109,75 +142,108 @@ export default function Home() {
   };
 
   const handleSubmit = async () => {
-    const token = getAuthToken();
-    
-    if (!token) {
-      setError('You must be logged in to save tasks');
-      return;
-    }
-
     if (!validateForm()) return;
 
-    try {
-      setLoading(true);
-      const url = editingTask ? `http://localhost:5000/api/tasks/${editingTask._id}` : 'http://localhost:5000/api/tasks';
-      const method = editingTask ? 'PUT' : 'POST';
+    if (isAuthenticated) {
+      const token = getAuthToken();
       
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (editingTask) {
-          setTasks(tasks.map(task => 
-            task._id === editingTask._id ? data.task : task
-          ));
-        } else {
-          setTasks([...tasks, data.task]);
-        }
-        
-        resetForm();
-        setError('');
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to save task');
+      if (!token) {
+        setError('You must be logged in to save tasks');
+        return;
       }
-    } catch (err) {
-      setError('Error saving task');
-    } finally {
-      setLoading(false);
+
+      try {
+        setLoading(true);
+        const url = editingTask ? `http://localhost:5000/api/tasks/${editingTask._id}` : 'http://localhost:5000/api/tasks';
+        const method = editingTask ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (editingTask) {
+            setTasks(tasks.map(task => 
+              task._id === editingTask._id ? data.task : task
+            ));
+          } else {
+            setTasks([...tasks, data.task]);
+          }
+          
+          resetForm();
+          setError('');
+        } else {
+          const errorData = await response.json();
+          setError(errorData.error || 'Failed to save task');
+        }
+      } catch (err) {
+        setError('Error saving task');
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      const newTask = {
+        _id: editingTask ? editingTask._id : generateLocalId(),
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        deadline: formData.deadline,
+        reminder: formData.reminder,
+        completed: editingTask ? editingTask.completed : false,
+        createdAt: editingTask ? editingTask.createdAt : new Date().toISOString()
+      };
+
+      let updatedTasks;
+      if (editingTask) {
+        updatedTasks = tasks.map(task => 
+          task._id === editingTask._id ? newTask : task
+        );
+      } else {
+        updatedTasks = [...tasks, newTask];
+      }
+
+      setTasks(updatedTasks);
+      saveLocalTasks(updatedTasks);
+      resetForm();
+      setError('');
     }
   };
 
   const handleDelete = async (taskId) => {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
     
-    try {
-      setLoading(true);
-      const token = getAuthToken();
-      
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+    if (isAuthenticated) {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+        
+        const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-      if (response.ok) {
-        setTasks(tasks.filter(task => task._id !== taskId));
-      } else {
-        setError('Failed to delete task');
+        if (response.ok) {
+          setTasks(tasks.filter(task => task._id !== taskId));
+        } else {
+          setError('Failed to delete task');
+        }
+      } catch (err) {
+        setError('Error deleting task');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Error deleting task');
-    } finally {
-      setLoading(false);
+    } else {
+      const updatedTasks = tasks.filter(task => task._id !== taskId);
+      setTasks(updatedTasks);
+      saveLocalTasks(updatedTasks);
     }
   };
 
@@ -194,29 +260,37 @@ export default function Home() {
   };
 
   const toggleTaskCompletion = async (taskId) => {
-    try {
-      setLoading(true);
-      const token = getAuthToken();
-      
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/toggle`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+    if (isAuthenticated) {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+        
+        const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/toggle`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(tasks.map(task => 
-          task._id === taskId ? data.task : task
-        ));
-      } else {
-        setError('Failed to update task status');
+        if (response.ok) {
+          const data = await response.json();
+          setTasks(tasks.map(task => 
+            task._id === taskId ? data.task : task
+          ));
+        } else {
+          setError('Failed to update task status');
+        }
+      } catch (err) {
+        setError('Error updating task status');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Error updating task status');
-    } finally {
-      setLoading(false);
+    } else {
+      const updatedTasks = tasks.map(task => 
+        task._id === taskId ? { ...task, completed: !task.completed } : task
+      );
+      setTasks(updatedTasks);
+      saveLocalTasks(updatedTasks);
     }
   };
 
@@ -253,28 +327,20 @@ export default function Home() {
 
   const handleLogout = () => {
     localStorage.removeItem('userSession');
-    navigate('/login');
+    navigate('/');
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
-          <p className="text-gray-600 mb-6">
-            You must be logged in to access your tasks. Please log in to continue.
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const dismissLocalNote = () => {
+    setShowLocalNote(false);
+    localStorage.setItem('localNoteDismissed', 'true');
+  };
+
+  useEffect(() => {
+    const noteDismissed = localStorage.getItem('localNoteDismissed');
+    if (noteDismissed === 'true') {
+      setShowLocalNote(false);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -291,10 +357,31 @@ export default function Home() {
             >
               <Plus size={20} />
               <span>Add Task</span>
-            </button> 
+            </button>
+            
             
           </div>
         </div>
+
+        {!isAuthenticated && showLocalNote && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
+            <div className="flex items-start">
+              <Info className="text-blue-400 mr-3 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="text-blue-800">
+                  <strong>Note:</strong> Your tasks are stored locally.
+                  If you want to sync your tasks across devices and save them permanently, please login to enable the sync feature.
+                </p>
+              </div>
+              <button
+                onClick={dismissLocalNote}
+                className="text-blue-600 hover:text-blue-800 ml-4"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
@@ -368,6 +455,7 @@ export default function Home() {
                     name="deadline"
                     value={formData.deadline}
                     onChange={handleInputChange}
+                    min={getTodayDate()}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
@@ -382,6 +470,7 @@ export default function Home() {
                     name="reminder"
                     value={formData.reminder}
                     onChange={handleInputChange}
+                    min={getTodayDate()}
                     max={formData.deadline}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required

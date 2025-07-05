@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, Calendar, Clock, Tag, AlertTriangle, ArrowLeft, Filter, Check, X } from 'lucide-react';
+import { Calendar, Clock, Tag, AlertTriangle, ArrowLeft, Filter, Check, X, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Category() {
@@ -8,19 +8,15 @@ export default function Category() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [editingTask, setEditingTask] = useState(null);
-  const [showEditForm, setShowEditForm] = useState(false);
+  const [showLocalNote, setShowLocalNote] = useState(true);
   const navigate = useNavigate();
 
   const categories = ['All', 'Work', 'Personal', 'Learning', 'Health', 'General'];
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    category: 'Work',
-    deadline: '',
-    reminder: ''
-  });
+  const getTodayDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
 
   const getAuthToken = () => {
     const userSession = localStorage.getItem('userSession');
@@ -44,9 +40,26 @@ export default function Category() {
 
   const isAuthenticated = getAuthToken();
 
+  const loadLocalTasks = () => {
+    const localTasks = localStorage.getItem('localTasks');
+    if (localTasks) {
+      try {
+        setTasks(JSON.parse(localTasks));
+      } catch (error) {
+        console.error('Error loading local tasks:', error);
+      }
+    }
+  };
+
+  const saveLocalTasks = (tasksToSave) => {
+    localStorage.setItem('localTasks', JSON.stringify(tasksToSave));
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchTasks();
+    } else {
+      loadLocalTasks();
     }
   }, [isAuthenticated]);
 
@@ -86,160 +99,39 @@ export default function Category() {
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
-    if (name === 'deadline' && formData.reminder && new Date(value) < new Date(formData.reminder)) {
-      setFormData(prev => ({
-        ...prev,
-        reminder: value
-      }));
-    }
-  };
-
-  const validateForm = () => {
-    if (!formData.title.trim()) {
-      setError('Task title is required');
-      return false;
-    }
-    
-    if (!formData.deadline) {
-      setError('Deadline is required');
-      return false;
-    }
-    
-    if (!formData.reminder) {
-      setError('Reminder is required');
-      return false;
-    }
-    
-    if (new Date(formData.reminder) > new Date(formData.deadline)) {
-      setError('Reminder cannot be set after the deadline');
-      return false;
-    }
-    
-    return true;
-  };
-
-  const handleUpdate = async () => {
-    const token = getAuthToken();
-    
-    if (!token) {
-      setError('⚠️ WARNING: You must be logged in to update tasks!');
-      return;
-    }
-
-    if (!validateForm()) return;
-
-    try {
-      setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/tasks/${editingTask._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(tasks.map(task => 
-          task._id === editingTask._id ? data.task : task
-        ));
-        
-        resetForm();
-        setError('');
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to update task');
-      }
-    } catch (err) {
-      setError('Error updating task');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (taskId) => {
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
-    
-    try {
-      setLoading(true);
-      const token = getAuthToken();
-      
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        setTasks(tasks.filter(task => task._id !== taskId));
-      } else {
-        setError('Failed to delete task');
-      }
-    } catch (err) {
-      setError('Error deleting task');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEdit = (task) => {
-    setEditingTask(task);
-    setFormData({
-      title: task.title,
-      description: task.description || '',
-      category: task.category,
-      deadline: task.deadline.split('T')[0],
-      reminder: task.reminder.split('T')[0]
-    });
-    setShowEditForm(true);
-  };
-
   const toggleTaskCompletion = async (taskId) => {
-    try {
-      setLoading(true);
-      const token = getAuthToken();
-      
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/toggle`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`
+    if (isAuthenticated) {
+      try {
+        setLoading(true);
+        const token = getAuthToken();
+        
+        const response = await fetch(`http://localhost:5000/api/tasks/${taskId}/toggle`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTasks(tasks.map(task => 
+            task._id === taskId ? data.task : task
+          ));
+        } else {
+          setError('Failed to update task status');
         }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(tasks.map(task => 
-          task._id === taskId ? data.task : task
-        ));
-      } else {
-        setError('Failed to update task status');
+      } catch (err) {
+        setError('Error updating task status');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError('Error updating task status');
-    } finally {
-      setLoading(false);
+    } else {
+      const updatedTasks = tasks.map(task => 
+        task._id === taskId ? { ...task, completed: !task.completed } : task
+      );
+      setTasks(updatedTasks);
+      saveLocalTasks(updatedTasks);
     }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      category: 'Work',
-      deadline: '',
-      reminder: ''
-    });
-    setEditingTask(null);
-    setShowEditForm(false);
   };
 
   const formatDate = (dateString) => {
@@ -266,30 +158,17 @@ export default function Category() {
     return tasks.filter(task => task.category === category).length;
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('userSession');
-    navigate('/login');
+  const dismissLocalNote = () => {
+    setShowLocalNote(false);
+    localStorage.setItem('localNoteDismissed', 'true');
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
-          <p className="text-gray-600 mb-6">
-            You must be logged in to access your tasks. Please log in to continue.
-          </p>
-          <button
-            onClick={() => navigate('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md font-medium"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const noteDismissed = localStorage.getItem('localNoteDismissed');
+    if (noteDismissed === 'true') {
+      setShowLocalNote(false);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -304,11 +183,27 @@ export default function Category() {
               <span>Back to Home</span>
             </button>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Tasks by Category</h2>
-            <p className="text-gray-600">Filter and manage your tasks by category</p>
-          </div>
         </div>
+
+        {!isAuthenticated && showLocalNote && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
+            <div className="flex items-start">
+              <Info className="text-blue-400 mr-3 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="text-blue-800">
+                  <strong>Note:</strong> Your tasks are stored locally.
+                  If you want to sync your tasks across devices and save them permanently, please login to enable the sync feature.
+                </p>
+              </div>
+              <button
+                onClick={dismissLocalNote}
+                className="text-blue-600 hover:text-blue-800 ml-4"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
@@ -344,109 +239,6 @@ export default function Category() {
             ))}
           </div>
         </div>
-
-        {showEditForm && (
-          <div className="mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Edit Task</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Task Title *
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter task title"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter task description"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category *
-                  </label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Work">Work</option>
-                    <option value="Personal">Personal</option>
-                    <option value="Learning">Learning</option>
-                    <option value="Health">Health</option>
-                    <option value="General">General</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Deadline *
-                  </label>
-                  <input
-                    type="date"
-                    name="deadline"
-                    value={formData.deadline}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reminder *
-                  </label>
-                  <input
-                    type="date"
-                    name="reminder"
-                    value={formData.reminder}
-                    onChange={handleInputChange}
-                    max={formData.deadline}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUpdate}
-                  disabled={loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Updating...' : 'Update Task'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="space-y-4">
           {loading && filteredTasks.length === 0 ? (
@@ -503,21 +295,6 @@ export default function Category() {
                         )}
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 ml-4">
-                    <button
-                      onClick={() => handleEdit(task)}
-                      className="text-blue-600 hover:bg-blue-50 p-2 rounded-md transition-colors"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(task._id)}
-                      className="text-red-600 hover:bg-red-50 p-2 rounded-md transition-colors"
-                    >
-                      <Trash2 size={18} />
-                    </button>
                   </div>
                 </div>
               </div>
