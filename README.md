@@ -25,7 +25,8 @@ npm install
 
 ```
 JWT_SECRET=your_jwt_secret
-EMAIL_USER=your_email_address
+// For nodemailer 
+EMAIL_USER=your_email_address 
 EMAIL_PASS=your_email_password
 ```
 
