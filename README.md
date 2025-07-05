@@ -54,8 +54,7 @@ The app will run on: `http://localhost:3000` (frontend) and `http://localhost:50
 
 * **Better Email Scheduling**: Integrate with cron jobs or a scheduler like **agenda.js** to queue and send emails precisely.
 * **Progress Tracker**: Add % completion or sub-tasks for better productivity tracking.
-* **Push Notifications**: Use web push or mobile push notifications for deadline reminders.
-* **Offline Support**: Add Service Workers for full offline functionality.
+* **Push Notifications**: Use web push or mobile push notifications for deadline reminders. 
 * **Mobile App**: Extend this with React Native for mobile versions.
 * **UI Polish**: Apply animations, loaders, and better color accessibility.
 
