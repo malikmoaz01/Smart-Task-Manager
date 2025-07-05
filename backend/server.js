@@ -3,6 +3,7 @@ import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
+import reminderRoutes from './routes/reminderRoutes.js'
 
 const app = express();
 const PORT = 5000;
@@ -13,6 +14,7 @@ app.use(express.json());
 connectDB();
 
 app.use('/api/auth', authRoutes);
-app.use('/api/tasks', taskRoutes )
+app.use('/api/tasks', taskRoutes);
+app.use('/api/reminder' , reminderRoutes);
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

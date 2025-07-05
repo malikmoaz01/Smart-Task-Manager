@@ -1,7 +1,7 @@
-
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { sendOnboardingEmail } from '../config/emailSender.js'; 
 
 const JWT_SECRET = 'e2d48c14d876c5fd12b71c6ac2ba68b3f65ae9fd92a54ff5e3cb8ac3705dc0bb';
 
@@ -29,6 +29,8 @@ export const signupUser = async (req, res) => {
       email,
       password: hashedPassword
     });
+ 
+    await sendOnboardingEmail(email, name);
 
     const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
 
