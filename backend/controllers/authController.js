@@ -1,8 +1,11 @@
+
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
- export const signupUser = async (req, res) => {
+const JWT_SECRET = 'e2d48c14d876c5fd12b71c6ac2ba68b3f65ae9fd92a54ff5e3cb8ac3705dc0bb';
+
+export const signupUser = async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
 
@@ -27,7 +30,7 @@ import jwt from 'jsonwebtoken';
       password: hashedPassword
     });
 
-    const token = jwt.sign({ id: newUser._id }, 'mysecretkey', { expiresIn: '7d' });
+    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
       message: 'Signup successful',
@@ -39,6 +42,7 @@ import jwt from 'jsonwebtoken';
       token
     });
   } catch (err) {
+    console.error('Signup error:', err);
     res.status(500).json({ message: 'Signup failed', error: err.message });
   }
 };
@@ -47,18 +51,21 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password)
+    if (!email || !password) {
       return res.status(400).json({ message: 'All fields are required' });
+    }
 
     const user = await User.findOne({ email });
-    if (!user)
+    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
+    if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
-    const token = jwt.sign({ id: user._id }, 'mysecretkey', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(200).json({
       message: 'Login successful',
@@ -70,6 +77,7 @@ export const loginUser = async (req, res) => {
       token
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Login failed', error: error.message });
   }
 };
