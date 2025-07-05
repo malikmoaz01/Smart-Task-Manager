@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Tag, AlertTriangle, ArrowLeft, Bell, Mail } from 'lucide-react';
+import { Calendar, Tag, AlertTriangle, ArrowLeft, Bell, Mail, Info, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Reminder() {
@@ -10,6 +10,7 @@ export default function Reminder() {
   const [userEmail, setUserEmail] = useState('');
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState(null);
+  const [showLocalNote, setShowLocalNote] = useState(true);
   const navigate = useNavigate();
 
   const getAuthToken = () => {
@@ -38,6 +39,13 @@ export default function Reminder() {
       loadLocalTasks();
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const noteDismissed = localStorage.getItem('localNoteDismissedReminder');
+    if (noteDismissed === 'true') {
+      setShowLocalNote(false);
+    }
+  }, []);
 
   const loadLocalTasks = () => {
     try {
@@ -148,7 +156,7 @@ export default function Reminder() {
           taskTitle: task.title,
           taskDescription: task.description,
           reminderDate: reminderDate,
-          message: `Hello! This is a friendly reminder about your task: "${task.title}". Please make sure to complete it by ${formatDate(task.deadline)}. Stay organized and productive!`
+          message: `Hello! This is a friendly reminder about your task: "${task.title}". Please make sure to complete it by ${formatDateTime(task.deadline)}. Stay organized and productive!`
         })
       });
 
@@ -175,45 +183,16 @@ export default function Reminder() {
     }
   };
 
-  const deleteTask = (taskId) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
-      if (isAuthenticated) { 
-        deleteTaskFromServer(taskId);
-      } else { 
-        const updatedTasks = tasks.filter(task => task._id !== taskId);
-        setTasks(updatedTasks);
-        saveLocalTasks(updatedTasks);
-      }
-    }
-  };
-
-  const deleteTaskFromServer = async (taskId) => {
-    try {
-      const token = getAuthToken();
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        setTasks(tasks.filter(task => task._id !== taskId));
-        alert('Task deleted successfully');
-      } else {
-        alert('Failed to delete task');
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
-      alert('Server error');
-    }
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   };
 
@@ -244,6 +223,11 @@ export default function Reminder() {
     }
   };
 
+  const dismissLocalNote = () => {
+    setShowLocalNote(false);
+    localStorage.setItem('localNoteDismissedReminder', 'true');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -256,21 +240,28 @@ export default function Reminder() {
               <ArrowLeft size={20} />
               <span>Back to Home</span>
             </button>
-            {!isAuthenticated && (
-              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                <p className="text-sm text-blue-800"> 
-                  <strong>Note:</strong> You're using local storage. Tasks will be saved locally and won't sync across devices. 
-                  <button 
-                    onClick={() => navigate('/login')} 
-                    className="text-blue-600 hover:text-blue-800 underline ml-1"
-                  >
-                    Login
-                  </button> for cloud sync.
-                </p>
-              </div>
-            )}
           </div>
         </div>
+
+        {!isAuthenticated && showLocalNote && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
+            <div className="flex items-start">
+              <Info className="text-blue-400 mr-3 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="text-blue-800">
+                  <strong>Note:</strong> Your tasks are stored locally.
+                  If you want to sync your tasks across devices and save them permanently, please login to enable the sync feature.
+                </p> 
+              </div>
+              <button
+                onClick={dismissLocalNote}
+                className="text-blue-600 hover:text-blue-800 ml-4"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
@@ -301,11 +292,11 @@ export default function Reminder() {
                         </span>
                         <span className="text-gray-500 flex items-center space-x-1">
                           <Bell size={14} />
-                          <span>Reminder: {formatDate(task.reminder)}</span>
+                          <span>Reminder: {formatDateTime(task.reminder)}</span>
                         </span>
                         <span className="text-gray-500 flex items-center space-x-1">
                           <Calendar size={14} />
-                          <span>Deadline: {formatDate(task.deadline)}</span>
+                          <span>Deadline: {formatDateTime(task.deadline)}</span>
                         </span>
                         {!isAuthenticated && task.reminderEmail && (
                           <span className="text-gray-500 flex items-center space-x-1">
@@ -326,14 +317,9 @@ export default function Reminder() {
                           onClick={() => handleSetReminder(task._id)}
                           className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm"
                         >
-                          Set Reminder
+                          Send Reminder By Email 
                         </button>
-                        <button
-                          onClick={() => deleteTask(task._id)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm"
-                        >
-                          Delete
-                        </button>
+                        
                       </div>
                     </div>
 

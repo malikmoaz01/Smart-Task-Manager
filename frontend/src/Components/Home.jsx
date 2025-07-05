@@ -15,12 +15,16 @@ export default function Home() {
     description: '',
     category: 'Work',
     deadline: '',
-    reminder: ''
+    deadlineTime: '',
+    reminder: '',
+    reminderTime: ''
   });
 
-  const getTodayDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+  const getTodayDateTime = () => {
+    const now = new Date();
+    const date = now.toISOString().split('T')[0];
+    const time = now.toTimeString().slice(0, 5);
+    return { date, time };
   };
  
   const getAuthToken = () => {
@@ -103,11 +107,17 @@ export default function Home() {
       [name]: value
     }));
 
-    if (name === 'deadline' && formData.reminder && new Date(value) < new Date(formData.reminder)) {
-      setFormData(prev => ({
-        ...prev,
-        reminder: value
-      }));
+    if (name === 'deadline' || name === 'deadlineTime') {
+      const deadlineDateTime = new Date(`${name === 'deadline' ? value : formData.deadline}T${name === 'deadlineTime' ? value : formData.deadlineTime}`);
+      const reminderDateTime = new Date(`${formData.reminder}T${formData.reminderTime}`);
+      
+      if (formData.reminder && formData.reminderTime && deadlineDateTime < reminderDateTime) {
+        setFormData(prev => ({
+          ...prev,
+          reminder: name === 'deadline' ? value : formData.deadline,
+          reminderTime: name === 'deadlineTime' ? value : formData.deadlineTime
+        }));
+      }
     }
   };
 
@@ -118,22 +128,40 @@ export default function Home() {
     }
     
     if (!formData.deadline) {
-      setError('Deadline is required');
+      setError('Deadline date is required');
       return false;
     }
     
-    const today = getTodayDate();
-    if (formData.deadline < today) {
-      setError('Deadline cannot be in the past');
+    if (!formData.deadlineTime) {
+      setError('Deadline time is required');
       return false;
     }
     
     if (!formData.reminder) {
-      setError('Reminder is required');
+      setError('Reminder date is required');
       return false;
     }
     
-    if (new Date(formData.reminder) > new Date(formData.deadline)) {
+    if (!formData.reminderTime) {
+      setError('Reminder time is required');
+      return false;
+    }
+    
+    const now = new Date();
+    const deadlineDateTime = new Date(`${formData.deadline}T${formData.deadlineTime}`);
+    const reminderDateTime = new Date(`${formData.reminder}T${formData.reminderTime}`);
+    
+    if (deadlineDateTime < now) {
+      setError('Deadline cannot be in the past');
+      return false;
+    }
+    
+    if (reminderDateTime < now) {
+      setError('Reminder cannot be in the past');
+      return false;
+    }
+    
+    if (reminderDateTime > deadlineDateTime) {
       setError('Reminder cannot be set after the deadline');
       return false;
     }
@@ -143,6 +171,17 @@ export default function Home() {
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
+
+    const deadlineDateTime = new Date(`${formData.deadline}T${formData.deadlineTime}`).toISOString();
+    const reminderDateTime = new Date(`${formData.reminder}T${formData.reminderTime}`).toISOString();
+
+    const taskData = {
+      title: formData.title,
+      description: formData.description,
+      category: formData.category,
+      deadline: deadlineDateTime,
+      reminder: reminderDateTime
+    };
 
     if (isAuthenticated) {
       const token = getAuthToken();
@@ -163,7 +202,7 @@ export default function Home() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(taskData)
         });
 
         if (response.ok) {
@@ -190,11 +229,7 @@ export default function Home() {
     } else {
       const newTask = {
         _id: editingTask ? editingTask._id : generateLocalId(),
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        deadline: formData.deadline,
-        reminder: formData.reminder,
+        ...taskData,
         completed: editingTask ? editingTask.completed : false,
         createdAt: editingTask ? editingTask.createdAt : new Date().toISOString()
       };
@@ -249,12 +284,17 @@ export default function Home() {
 
   const handleEdit = (task) => {
     setEditingTask(task);
+    const deadlineDate = new Date(task.deadline);
+    const reminderDate = new Date(task.reminder);
+    
     setFormData({
       title: task.title,
       description: task.description || '',
       category: task.category,
-      deadline: task.deadline.split('T')[0],
-      reminder: task.reminder.split('T')[0]
+      deadline: deadlineDate.toISOString().split('T')[0],
+      deadlineTime: deadlineDate.toTimeString().slice(0, 5),
+      reminder: reminderDate.toISOString().split('T')[0],
+      reminderTime: reminderDate.toTimeString().slice(0, 5)
     });
     setShowAddForm(true);
   };
@@ -300,17 +340,23 @@ export default function Home() {
       description: '',
       category: 'Work',
       deadline: '',
-      reminder: ''
+      deadlineTime: '',
+      reminder: '',
+      reminderTime: ''
     });
     setEditingTask(null);
     setShowAddForm(false);
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   };
 
@@ -342,6 +388,8 @@ export default function Home() {
     }
   }, []);
 
+  const { date: todayDate, time: currentTime } = getTodayDateTime();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -358,8 +406,6 @@ export default function Home() {
               <Plus size={20} />
               <span>Add Task</span>
             </button>
-            
-            
           </div>
         </div>
 
@@ -427,54 +473,74 @@ export default function Home() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category *
-                  </label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Work">Work</option>
-                    <option value="Personal">Personal</option>
-                    <option value="Learning">Learning</option>
-                    <option value="Health">Health</option>
-                    <option value="General">General</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category *
+                </label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Work">Work</option>
+                  <option value="Personal">Personal</option>
+                  <option value="Learning">Learning</option>
+                  <option value="Health">Health</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Deadline *
                   </label>
-                  <input
-                    type="date"
-                    name="deadline"
-                    value={formData.deadline}
-                    onChange={handleInputChange}
-                    min={getTodayDate()}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      name="deadline"
+                      value={formData.deadline}
+                      onChange={handleInputChange}
+                      min={todayDate}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                    <input
+                      type="time"
+                      name="deadlineTime"
+                      value={formData.deadlineTime}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Reminder *
                   </label>
-                  <input
-                    type="date"
-                    name="reminder"
-                    value={formData.reminder}
-                    onChange={handleInputChange}
-                    min={getTodayDate()}
-                    max={formData.deadline}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      name="reminder"
+                      value={formData.reminder}
+                      onChange={handleInputChange}
+                      min={todayDate}
+                      max={formData.deadline}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                    <input
+                      type="time"
+                      name="reminderTime"
+                      value={formData.reminderTime}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -547,12 +613,12 @@ export default function Home() {
                         
                         <span className={`flex items-center space-x-1 ${task.completed ? 'text-gray-400' : 'text-gray-500'}`}>
                           <Calendar size={14} />
-                          <span>Deadline: {formatDate(task.deadline)}</span>
+                          <span>Deadline: {formatDateTime(task.deadline)}</span>
                         </span>
                         
                         <span className={`flex items-center space-x-1 ${task.completed ? 'text-gray-400' : 'text-gray-500'}`}>
                           <Clock size={14} />
-                          <span>Reminder: {formatDate(task.reminder)}</span>
+                          <span>Reminder: {formatDateTime(task.reminder)}</span>
                         </span>
 
                         {task.completed && (

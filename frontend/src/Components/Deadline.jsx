@@ -136,11 +136,15 @@ export default function Deadline() {
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   };
 
@@ -279,7 +283,6 @@ export default function Deadline() {
           </div>
         )}
 
-        {/* Filter Section - Updated to match Category component style */}
         <div className="mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center space-x-2 mb-4">
             <Filter size={20} className="text-gray-600" />
@@ -341,12 +344,12 @@ export default function Deadline() {
                           
                           <span className="text-gray-500 flex items-center space-x-1">
                             <Calendar size={14} />
-                            <span>Deadline: {formatDate(task.deadline)}</span>
+                            <span>Deadline: {formatDateTime(task.deadline)}</span>
                           </span>
                           
                           <span className="text-gray-500 flex items-center space-x-1">
                             <Clock size={14} />
-                            <span>Reminder: {formatDate(task.reminder)}</span>
+                            <span>Reminder: {formatDateTime(task.reminder)}</span>
                           </span>
                         </div>
                       </div>

@@ -133,12 +133,16 @@ export default function Category() {
       saveLocalTasks(updatedTasks);
     }
   };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+ 
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   };
 
@@ -280,12 +284,12 @@ export default function Category() {
                         
                         <span className={`flex items-center space-x-1 ${task.completed ? 'text-gray-400' : 'text-gray-500'}`}>
                           <Calendar size={14} />
-                          <span>Deadline: {formatDate(task.deadline)}</span>
+                          <span>Deadline: {formatDateTime(task.deadline)}</span>
                         </span>
                         
                         <span className={`flex items-center space-x-1 ${task.completed ? 'text-gray-400' : 'text-gray-500'}`}>
                           <Clock size={14} />
-                          <span>Reminder: {formatDate(task.reminder)}</span>
+                          <span>Reminder: {formatDateTime(task.reminder)}</span>
                         </span>
 
                         {task.completed && (
