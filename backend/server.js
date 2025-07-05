@@ -4,6 +4,7 @@ import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
 import reminderRoutes from './routes/reminderRoutes.js'
+import { startDeadlineReminderCron } from './config/cronJobs.js';
 
 const app = express();
 const PORT = 5000;
@@ -12,6 +13,8 @@ app.use(cors());
 app.use(express.json());
 
 connectDB();
+
+startDeadlineReminderCron();
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);

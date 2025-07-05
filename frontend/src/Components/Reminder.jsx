@@ -145,7 +145,7 @@ export default function Reminder() {
     try {
       const task = tasks.find(t => t._id === currentTaskId);
       const reminderDate = reminderDates[currentTaskId];
-      
+
       const response = await fetch('http://localhost:5000/api/reminder/guest', {
         method: 'POST',
         headers: {
@@ -162,14 +162,14 @@ export default function Reminder() {
 
       const data = await response.json();
       if (response.ok) {
-        const updatedTasks = tasks.map(t => 
-          t._id === currentTaskId 
+        const updatedTasks = tasks.map(t =>
+          t._id === currentTaskId
             ? { ...t, reminder: reminderDate, reminderEmail: userEmail }
             : t
         );
         setTasks(updatedTasks);
         saveLocalTasks(updatedTasks);
-        
+
         alert('Reminder set successfully! You will receive an email notification.');
         setShowEmailModal(false);
         setUserEmail('');
@@ -183,7 +183,7 @@ export default function Reminder() {
     }
   };
 
-  
+
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -249,9 +249,8 @@ export default function Reminder() {
               <Info className="text-blue-400 mr-3 mt-0.5" size={20} />
               <div className="flex-1">
                 <p className="text-blue-800">
-                  <strong>Note:</strong> Your tasks are stored locally.
-                  If you want to sync your tasks across devices and save them permanently, please login to enable the sync feature.
-                </p> 
+                  <strong>Note:</strong> A background cron job runs every hour to automatically check upcoming deadlines and send email reminders using npm package node-cron.
+                </p>
               </div>
               <button
                 onClick={dismissLocalNote}
@@ -317,9 +316,9 @@ export default function Reminder() {
                           onClick={() => handleSetReminder(task._id)}
                           className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm"
                         >
-                          Send Reminder By Email 
+                          Send Reminder By Email
                         </button>
-                        
+
                       </div>
                     </div>
 
