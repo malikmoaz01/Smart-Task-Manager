@@ -10,7 +10,7 @@ A minimal task manager app that helps users stay productive by organizing tasks,
 
 ```bash
 cd backend
-npm install or npm i
+npm install
 ```
 
 2. **Set up environment variables** Create a `.env` file in the `backend/` directory:
