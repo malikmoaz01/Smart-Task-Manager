@@ -1,13 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Tag, AlertTriangle, ArrowLeft, Check, X, Info } from 'lucide-react';
+import { Calendar, Clock, Tag, AlertTriangle, ArrowLeft, Check, X, Info, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Deadline() {
   const [tasks, setTasks] = useState([]);
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showLocalNote, setShowLocalNote] = useState(true);
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const navigate = useNavigate();
+ 
+  const filterOptions = [
+    { key: 'all', label: 'All', color: 'bg-gray-100 text-gray-700 hover:bg-gray-200' },
+    { key: 'missed', label: 'Overdue', color: 'bg-red-100 text-red-700 hover:bg-red-200' },
+    { key: 'today', label: 'Due Today', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+    { key: 'soon', label: 'Due Soon', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' },
+    { key: 'upcoming', label: 'Upcoming', color: 'bg-green-100 text-green-700 hover:bg-green-200' }
+  ];
 
   const getAuthToken = () => {
     const userSession = localStorage.getItem('userSession');
@@ -162,6 +172,57 @@ export default function Deadline() {
     }
   };
 
+  const filterTasks = (tasks, filter) => {
+    if (filter === 'all') {
+      return tasks;
+    }
+
+    return tasks.filter(task => {
+      const deadlineStatus = getDeadlineStatus(task.deadline);
+      
+      switch (filter) {
+        case 'missed':
+          return deadlineStatus.status === 'overdue';
+        case 'today':
+          return deadlineStatus.status === 'today';
+        case 'soon':
+          return deadlineStatus.status === 'urgent';
+        case 'upcoming':
+          return deadlineStatus.status === 'normal';
+        default:
+          return true;
+      }
+    });
+  };
+
+  const getFilterCount = (filter) => {
+    if (filter === 'all') {
+      return tasks.length;
+    }
+
+    return tasks.filter(task => {
+      const deadlineStatus = getDeadlineStatus(task.deadline);
+      
+      switch (filter) {
+        case 'missed':
+          return deadlineStatus.status === 'overdue';
+        case 'today':
+          return deadlineStatus.status === 'today';
+        case 'soon':
+          return deadlineStatus.status === 'urgent';
+        case 'upcoming':
+          return deadlineStatus.status === 'normal';
+        default:
+          return 0;
+      }
+    }).length;
+  };
+
+  useEffect(() => {
+    const filtered = filterTasks(tasks, selectedFilter);
+    setFilteredTasks(filtered);
+  }, [tasks, selectedFilter]);
+
   const dismissLocalNote = () => {
     setShowLocalNote(false);
     localStorage.setItem('localNoteDismissedDeadline', 'true');
@@ -218,13 +279,40 @@ export default function Deadline() {
           </div>
         )}
 
+        {/* Filter Section - Updated to match Category component style */}
+        <div className="mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Filter size={20} className="text-gray-600" />
+            <h3 className="text-lg font-medium text-gray-900">Filter by Deadline</h3>
+          </div>
+          
+          <div className="flex flex-wrap gap-3">
+            {filterOptions.map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setSelectedFilter(option.key)}
+                className={`px-4 py-2 rounded-full flex items-center space-x-2 transition-colors ${
+                  selectedFilter === option.key
+                    ? 'bg-blue-600 text-white'
+                    : option.color
+                }`}
+              >
+                <span>{option.label}</span>
+                <span className="bg-white bg-opacity-20 text-xs px-2 py-1 rounded-full">
+                  {getFilterCount(option.key)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="space-y-4">
           {loading ? (
             <div className="text-center py-12">
               <div className="text-gray-400">Loading tasks...</div>
             </div>
           ) : (
-            tasks.map((task) => {
+            filteredTasks.map((task) => {
               const deadlineStatus = getDeadlineStatus(task.deadline);
               
               return (
@@ -276,14 +364,20 @@ export default function Deadline() {
           )}
         </div>
 
-        {tasks.length === 0 && !loading && (
+        {filteredTasks.length === 0 && !loading && (
           <div className="text-center py-12">
             <div className="text-gray-400 mb-4">
               <Calendar size={48} className="mx-auto" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No pending deadlines</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {selectedFilter === 'all' 
+                ? 'No pending deadlines' 
+                : `No ${filterOptions.find(opt => opt.key === selectedFilter)?.label.toLowerCase()} deadlines`}
+            </h3>
             <p className="text-gray-600 mb-4">
-              Great work! All your tasks are completed or you haven't added any tasks yet.
+              {selectedFilter === 'all' 
+                ? 'Great work! All your tasks are completed or you haven\'t added any tasks yet.'
+                : `No tasks match the ${filterOptions.find(opt => opt.key === selectedFilter)?.label.toLowerCase()} filter.`}
             </p>
             <button
               onClick={() => navigate('/')}
