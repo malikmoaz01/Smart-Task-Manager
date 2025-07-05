@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Tag, AlertTriangle, ArrowLeft, Bell, Mail } from 'lucide-react';
+import { Calendar, Tag, AlertTriangle, ArrowLeft, Bell, Mail, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Reminder() {
@@ -10,6 +10,7 @@ export default function Reminder() {
   const [userEmail, setUserEmail] = useState('');
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState(null);
+  const [autoReminders, setAutoReminders] = useState({}); 
   const navigate = useNavigate();
 
   const getAuthToken = () => {
@@ -37,15 +38,24 @@ export default function Reminder() {
     } else {
       loadLocalTasks();
     }
+     
+    const interval = setInterval(checkAutoReminders, 60000); 
+    return () => clearInterval(interval);
   }, [isAuthenticated]);
 
   const loadLocalTasks = () => {
     try {
       const localTasks = localStorage.getItem('localTasks');
+      const localAutoReminders = localStorage.getItem('autoReminders');
+      
       if (localTasks) {
         const parsedTasks = JSON.parse(localTasks);
         const sortedTasks = parsedTasks.sort((a, b) => new Date(a.reminder) - new Date(b.reminder));
         setTasks(sortedTasks);
+      }
+      
+      if (localAutoReminders) {
+        setAutoReminders(JSON.parse(localAutoReminders));
       }
     } catch (err) {
       console.error('Error loading local tasks:', err);
@@ -58,6 +68,121 @@ export default function Reminder() {
     } catch (err) {
       console.error('Error saving local tasks:', err);
     }
+  };
+
+  const saveAutoReminders = (updatedAutoReminders) => {
+    try {
+      localStorage.setItem('autoReminders', JSON.stringify(updatedAutoReminders));
+    } catch (err) {
+      console.error('Error saving auto reminders:', err);
+    }
+  };
+
+  const checkAutoReminders = () => {
+    const now = new Date();
+    
+    tasks.forEach(task => {
+      const deadline = new Date(task.deadline);
+      const timeDiff = deadline - now;
+      const hoursRemaining = Math.ceil(timeDiff / (1000 * 60 * 60));
+       
+      const taskAutoReminder = autoReminders[task._id];
+      if (!taskAutoReminder || !taskAutoReminder.enabled) return;
+       
+      if (hoursRemaining <= 48 && hoursRemaining > 24 && !taskAutoReminder.sent48h) {
+        sendAutoReminder(task, '48 hours');
+        updateAutoReminderStatus(task._id, { sent48h: true });
+      }
+       
+      if (hoursRemaining <= 24 && hoursRemaining > 0 && !taskAutoReminder.sent24h) {
+        sendAutoReminder(task, '24 hours');
+        updateAutoReminderStatus(task._id, { sent24h: true });
+      }
+    });
+  };
+
+  const sendAutoReminder = async (task, timeRemaining) => {
+    try {
+      const email = isAuthenticated ? 
+        await getUserEmail() : 
+        autoReminders[task._id]?.email;
+      
+      if (!email) return;
+      
+      const response = await fetch('http://localhost:5000/api/reminder/auto', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(isAuthenticated && { 'Authorization': `Bearer ${getAuthToken()}` })
+        },
+        body: JSON.stringify({
+          email: email,
+          taskTitle: task.title,
+          taskDescription: task.description,
+          deadline: task.deadline,
+          timeRemaining: timeRemaining,
+          message: `⏰ Auto Reminder: Your task "${task.title}" deadline is in ${timeRemaining}! Don't forget to complete it by ${formatDate(task.deadline)}.`
+        })
+      });
+
+      if (response.ok) {
+        console.log(`Auto reminder sent for task: ${task.title} (${timeRemaining} remaining)`); 
+        showNotification(`Reminder sent: ${task.title} deadline in ${timeRemaining}`);
+      }
+    } catch (err) {
+      console.error('Error sending auto reminder:', err);
+    }
+  };
+
+  const getUserEmail = async () => {
+    try {
+      const token = getAuthToken();
+      const response = await fetch('http://localhost:5000/api/user/profile', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      return data.email;
+    } catch (err) {
+      console.error('Error fetching user email:', err);
+      return null;
+    }
+  };
+
+  const updateAutoReminderStatus = (taskId, updates) => {
+    const updatedAutoReminders = {
+      ...autoReminders,
+      [taskId]: {
+        ...autoReminders[taskId],
+        ...updates
+      }
+    };
+    setAutoReminders(updatedAutoReminders);
+    saveAutoReminders(updatedAutoReminders);
+  };
+
+  const toggleAutoReminder = (taskId, enabled, email = null) => {
+    const updatedAutoReminders = {
+      ...autoReminders,
+      [taskId]: {
+        enabled: enabled,
+        email: email || autoReminders[taskId]?.email,
+        sent24h: false,
+        sent48h: false
+      }
+    };
+    setAutoReminders(updatedAutoReminders);
+    saveAutoReminders(updatedAutoReminders);
+  };
+
+  const showNotification = (message) => { 
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-md shadow-lg z-50';
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 3000);
   };
 
   const fetchTasks = async () => {
@@ -183,6 +308,11 @@ export default function Reminder() {
         const updatedTasks = tasks.filter(task => task._id !== taskId);
         setTasks(updatedTasks);
         saveLocalTasks(updatedTasks);
+         
+        const updatedAutoReminders = { ...autoReminders };
+        delete updatedAutoReminders[taskId];
+        setAutoReminders(updatedAutoReminders);
+        saveAutoReminders(updatedAutoReminders);
       }
     }
   };
@@ -199,6 +329,12 @@ export default function Reminder() {
 
       if (response.ok) {
         setTasks(tasks.filter(task => task._id !== taskId));
+         
+        const updatedAutoReminders = { ...autoReminders };
+        delete updatedAutoReminders[taskId];
+        setAutoReminders(updatedAutoReminders);
+        saveAutoReminders(updatedAutoReminders);
+        
         alert('Task deleted successfully');
       } else {
         alert('Failed to delete task');
@@ -241,6 +377,23 @@ export default function Reminder() {
       return { status: 'soon', color: 'text-yellow-600', text: `${diffDays} days to remind` };
     } else {
       return { status: 'upcoming', color: 'text-green-600', text: `${diffDays} days to remind` };
+    }
+  };
+
+  const getDeadlineStatus = (deadline) => {
+    const now = new Date();
+    const deadlineDate = new Date(deadline);
+    const timeDiff = deadlineDate - now;
+    const hoursRemaining = Math.ceil(timeDiff / (1000 * 60 * 60));
+    
+    if (hoursRemaining <= 0) {
+      return { status: 'overdue', color: 'text-red-600', text: 'Overdue' };
+    } else if (hoursRemaining <= 24) {
+      return { status: 'urgent', color: 'text-red-600', text: `${hoursRemaining}h left` };
+    } else if (hoursRemaining <= 48) {
+      return { status: 'soon', color: 'text-orange-600', text: `${Math.ceil(hoursRemaining/24)}d left` };
+    } else {
+      return { status: 'normal', color: 'text-green-600', text: `${Math.ceil(hoursRemaining/24)}d left` };
     }
   };
 
@@ -287,6 +440,9 @@ export default function Reminder() {
           ) : (
             tasks.map((task) => {
               const reminderStatus = getReminderStatus(task.reminder);
+              const deadlineStatus = getDeadlineStatus(task.deadline);
+              const taskAutoReminder = autoReminders[task._id];
+              
               return (
                 <div key={task._id} className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between">
@@ -307,11 +463,49 @@ export default function Reminder() {
                           <Calendar size={14} />
                           <span>Deadline: {formatDate(task.deadline)}</span>
                         </span>
+                        <span className={`flex items-center space-x-1 ${deadlineStatus.color}`}>
+                          <Clock size={14} />
+                          <span>{deadlineStatus.text}</span>
+                        </span>
                         {!isAuthenticated && task.reminderEmail && (
                           <span className="text-gray-500 flex items-center space-x-1">
                             <Mail size={14} />
                             <span>Email: {task.reminderEmail}</span>
                           </span>
+                        )}
+                      </div>
+
+                      {/* Auto-reminder toggle */}
+                      <div className="flex items-center space-x-4 mb-3 p-3 bg-gray-50 rounded-md">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`auto-${task._id}`}
+                            checked={taskAutoReminder?.enabled || false}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                if (!isAuthenticated) {
+                                  const email = prompt('Enter your email for auto-reminders:');
+                                  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                                    toggleAutoReminder(task._id, true, email);
+                                  }
+                                } else {
+                                  toggleAutoReminder(task._id, true);
+                                }
+                              } else {
+                                toggleAutoReminder(task._id, false);
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                          />
+                          <label htmlFor={`auto-${task._id}`} className="text-sm font-medium text-gray-700">
+                            Auto-reminder (24h & 48h before deadline)
+                          </label>
+                        </div>
+                        {taskAutoReminder?.enabled && (
+                          <div className="text-xs text-green-600">
+                            ✓ Active {taskAutoReminder.email && `(${taskAutoReminder.email})`}
+                          </div>
                         )}
                       </div>
 
@@ -337,9 +531,12 @@ export default function Reminder() {
                       </div>
                     </div>
 
-                    <div className="ml-4">
+                    <div className="ml-4 flex flex-col items-end space-y-2">
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${reminderStatus.color} bg-opacity-10`}>
                         {reminderStatus.text}
+                      </span>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${deadlineStatus.color} bg-opacity-10`}>
+                        {deadlineStatus.text}
                       </span>
                     </div>
                   </div>
