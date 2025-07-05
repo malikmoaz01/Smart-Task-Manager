@@ -4,7 +4,15 @@ A minimal task manager app that helps users stay productive by organizing tasks,
 
 ## How to Run the Project
 
-### 🔧 Backend (Express.js)
+
+###  Database (MongoDB)
+
+* Make sure You have MongoDB compass.
+* Firstly Create the Connection mongodb://127.0.0.1:27017 
+* Then click on connect button 
+* See Output(MongoDB Connected) when backend server will start 
+
+###  Backend (Express.js)
 
 1. **Install dependencies**
 
