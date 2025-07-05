@@ -27,7 +27,7 @@ EMAIL_PASS=your_email_password
 node server.js 
 ```
 
-### 🌐 Frontend (React.js with Tailwind CSS)
+### Frontend (React.js with Tailwind CSS)
 
 1. **Install dependencies**
 
